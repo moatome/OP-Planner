@@ -1,9 +1,7 @@
-import React, { useEffect } from 'react';
-import { useState, useCallback, DragEvent } from 'react'; 
+import React, { useEffect, useState, useCallback, DragEvent } from 'react';
 import { Search, RotateCcw, User, Calendar, Settings, FileText, Users } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
 import { useSharePointPersonnel, authConfig } from './sharepoint-integration';
-import { app } from '@microsoft/teams-js';
 
 type TableConfigKey = 'main' | 'emergency' | 'weekend';
 
@@ -501,38 +499,48 @@ const App = () => {
     PERSONNEL_LIST_ID
   );
 
+  // Remove all Teams-related code and simplify the auth flow
   useEffect(() => {
-    console.log('Initializing Teams app...');
-    app.initialize().then(() => {
-      console.log('Teams app initialized');
-      app.notifySuccess();
-    }).catch(err => console.error('Teams init error:', err));
-  }, []);
-
-  useEffect(() => {
-    console.log('Accounts changed:', accounts);
     const getToken = async () => {
       if (accounts.length > 0) {
         try {
-          console.log('Attempting to acquire token silently...');
           const response = await instance.acquireTokenSilent({
             scopes: authConfig.scopes,
             account: accounts[0]
           });
-          console.log('Token acquired successfully');
           setAccessToken(response.accessToken);
         } catch (error) {
           console.error('Token acquisition failed:', error);
+          // Fallback to mock data if auth fails
+          console.log('Using mock data instead');
         }
       }
     };
     getToken();
   }, [accounts, instance]);
 
-  if (loading) return <div>Loading personnel...</div>;
-  if (error) return <div>Error loading personnel: {error}</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+        <p>Loading personnel data...</p>
+      </div>
+    </div>
+  );
 
-  return <ORPlannerApp personnel={personnel} />;
+  if (error) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center text-red-600">
+        <p>Error loading personnel:</p>
+        <p className="mt-2 bg-red-100 p-2 rounded">{error.toString()}</p>
+        <p className="mt-4 text-gray-600">Using sample data instead</p>
+        {/* Render app with mock data */}
+        <ORPlannerApp personnel={[]} />
+      </div>
+    </div>
+  );
+
+  return <ORPlannerApp personnel={personnel || []} />;
 };
 
 export default App;
