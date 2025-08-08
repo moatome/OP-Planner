@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, DragEvent } from 'react';
 import { Search, RotateCcw, User, Calendar, Settings, FileText, Users } from 'lucide-react';
-import { useMsal } from '@azure/msal-react';
 import { useSharePointPersonnel, authConfig } from './sharepoint-integration';
+import { useMsal } from '@azure/msal-react';
+import { InteractionRequiredAuthError } from '@azure/msal-browser';
 
 type TableConfigKey = 'main' | 'emergency' | 'weekend';
 
@@ -58,7 +59,8 @@ const ORPlannerApp = (props: { personnel: any[] }) => {
   const [draggedPerson, setDraggedPerson] = useState<Personnel | null>(null);
 
   // Sample personnel data (will be replaced with SharePoint data)
-  const [personnel] = useState([
+  const [personnel] = useState(
+    props.personnel.length > 0 ? props.personnel : [
     { id: 1, name: "Dr. Sarah Weber", role: "Anästhesie Arzt", initials: "SW", department: "Anästhesie" },
     { id: 2, name: "Dr. Michael Koch", role: "Anästhesie Arzt", initials: "MK", department: "Anästhesie" },
     { id: 3, name: "Lisa Müller", role: "Anästhesie Pflege", initials: "LM", department: "Anästhesie" },
@@ -148,7 +150,6 @@ const ORPlannerApp = (props: { personnel: any[] }) => {
   );
 
   const PlannerPage = () => { 
-
     const config = tableConfigs[currentTable];
     
     const filteredPersonnel = personnel.filter(person =>
@@ -196,7 +197,7 @@ const ORPlannerApp = (props: { personnel: any[] }) => {
       setDraggedPerson(null);
     }, [draggedPerson, currentTable]);
 
-    const PersonCard = ({ person, isDraggable = true, onRemove= (id: number) => {}, size = "normal" } : {person: Personnel; isDraggable?: boolean; onRemove?: (id: number) => void; size?: "normal" | "small";}) => {
+    const PersonCard = ({ person, isDraggable = true, onRemove = (id: number) => {}, size = "normal" }: {person: Personnel; isDraggable?: boolean; onRemove?: (id: number) => void; size?: "normal" | "small";}) => {
       const isSmall = size === "small";
       return (
         <div
@@ -488,8 +489,11 @@ const ORPlannerApp = (props: { personnel: any[] }) => {
 };
 
 const App = () => {
-  const { instance, accounts } = useMsal();
+  const { instance, accounts, inProgress } = useMsal();
   const [accessToken, setAccessToken] = React.useState<string | null>(null);
+  const [authError, setAuthError] = React.useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = React.useState<any>({});
+  
   const SITE_ID = 'a4cba12d-b1bf-4542-9ca4-7563ad6b7b09';
   const PERSONNEL_LIST_ID = '67d0c026-90c1-4822-b27f-66f73c8139e5';
   
@@ -499,46 +503,132 @@ const App = () => {
     PERSONNEL_LIST_ID
   );
 
-  // Remove all Teams-related code and simplify the auth flow
   useEffect(() => {
     const getToken = async () => {
-      if (accounts.length > 0) {
-        try {
+      try {
+        console.log('Auth state:', { 
+          accountsCount: accounts.length, 
+          inProgress, 
+          hasActiveAccount: !!instance.getActiveAccount() 
+        });
+        
+        setDebugInfo({
+          accountsCount: accounts.length,
+          inProgress,
+          hasActiveAccount: !!instance.getActiveAccount(),
+          accounts: accounts.map(acc => ({ username: acc.username, name: acc.name }))
+        });
+
+        if (accounts.length > 0) {
+          console.log('Attempting silent token acquisition...');
+          
           const response = await instance.acquireTokenSilent({
             scopes: authConfig.scopes,
             account: accounts[0]
           });
+          
+          console.log('Token acquired successfully:', {
+            tokenLength: response.accessToken.length,
+            account: response.account?.username
+          });
+          
           setAccessToken(response.accessToken);
-        } catch (error) {
-          console.error('Token acquisition failed:', error);
-          // Fallback to mock data if auth fails
-          console.log('Using mock data instead');
+          setAuthError(null);
+        } else if (inProgress === "none") {
+          console.log('No accounts found, redirecting to login...');
+          await instance.loginRedirect({
+            scopes: authConfig.scopes
+          });
+        }
+      } catch (error) {
+        console.error('Token acquisition failed:', error);
+        setAuthError(error instanceof Error ? error.message : 'Authentication failed');
+        
+        if (error instanceof InteractionRequiredAuthError) {
+          console.log('Interactive login required, redirecting...');
+          try {
+            await instance.loginRedirect({
+              scopes: authConfig.scopes
+            });
+          } catch (redirectError) {
+            console.error('Redirect failed:', redirectError);
+            setAuthError('Login redirect failed: ' + (redirectError instanceof Error ? redirectError.message : 'Unknown error'));
+          }
         }
       }
     };
+
     getToken();
-  }, [accounts, instance]);
+  }, [accounts, instance, inProgress]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-        <p>Loading personnel data...</p>
+  if (inProgress !== "none" || loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="mb-4">
+            {inProgress !== "none" ? 'Authenticating...' : 'Loading personnel...'}
+          </p>
+          <div className="text-xs text-gray-500 bg-gray-100 p-2 rounded max-w-md">
+            <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (error) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center text-red-600">
-        <p>Error loading personnel:</p>
-        <p className="mt-2 bg-red-100 p-2 rounded">{error.toString()}</p>
-        <p className="mt-4 text-gray-600">Using sample data instead</p>
-        {/* Render app with mock data */}
-        <ORPlannerApp personnel={[]} />
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center text-red-600 max-w-md p-6 bg-white rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Authentication Error</h2>
+          <p className="mb-4 text-sm">{authError}</p>
+          <div className="text-xs text-gray-500 bg-gray-100 p-2 rounded mb-4">
+            <strong>Debug Info:</strong>
+            <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+          </div>
+          <div className="space-y-2">
+            <button
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 block w-full"
+              onClick={() => {
+                setAuthError(null);
+                instance.loginRedirect({ scopes: authConfig.scopes });
+              }}
+            >
+              Sign In Again
+            </button>
+            <button
+              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 block w-full"
+              onClick={() => {
+                setAuthError(null);
+                setAccessToken(null);
+                // Continue with mock data
+              }}
+            >
+              Continue with Mock Data
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (!accessToken && accounts.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center max-w-md p-6 bg-white rounded-lg shadow">
+          <h2 className="text-xl font-bold mb-4">Sign In Required</h2>
+          <p className="mb-4 text-gray-600">Please sign in to access SharePoint data.</p>
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            onClick={() => instance.loginRedirect({ scopes: authConfig.scopes })}
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return <ORPlannerApp personnel={personnel || []} />;
 };
