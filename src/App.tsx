@@ -630,6 +630,7 @@ const App = () => {
     );
   }
 
+  // Return the main OR Planner application
   return <ORPlannerApp personnel={personnel || []} />;
 };
 
