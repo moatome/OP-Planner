@@ -996,8 +996,8 @@ export const useSharePointAssignments = (
 // Updated auth config - make sure this matches your app registration
 export const authConfig = {
   auth: {
-    clientId: process.env.REACT_APP_AAD_CLIENT_ID || '06c5c649-973a-49a0-ba36-56ecf11285f1',
-    authority: process.env.REACT_APP_AAD_AUTHORITY || 'https://login.microsoftonline.com/d0c4995a-6bf2-4d26-9281-906c0c59b9cb',
+    clientId: import.meta.env.VITE_AAD_CLIENT_ID || '06c5c649-973a-49a0-ba36-56ecf11285f1',
+    authority: import.meta.env.VITE_AAD_AUTHORITY || 'https://login.microsoftonline.com/d0c4995a-6bf2-4d26-9281-906c0c59b9cb',
     redirectUri: window.location.origin,
     postLogoutRedirectUri: window.location.origin,
   },

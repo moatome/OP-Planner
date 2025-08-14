@@ -6,8 +6,8 @@ import { PublicClientApplication, EventType, EventMessage, EventPayload, Authent
 import { MsalProvider } from '@azure/msal-react';
 
 // Use environment variables or replace with your actual values
-const CLIENT_ID = process.env.REACT_APP_AAD_CLIENT_ID || '06c5c649-973a-49a0-ba36-56ecf11285f1';
-const TENANT_ID = process.env.REACT_APP_AAD_TENANT_ID || 'd0c4995a-6bf2-4d26-9281-906c0c59b9cb';
+const CLIENT_ID = import.meta.env.VITE_AAD_CLIENT_ID || '06c5c649-973a-49a0-ba36-56ecf11285f1';
+const TENANT_ID = import.meta.env.VITE_AAD_TENANT_ID || 'd0c4995a-6bf2-4d26-9281-906c0c59b9cb';
 
 const msalInstance = new PublicClientApplication({
   auth: {
